@@ -62,7 +62,7 @@ String apiKeyValue = "";
 
 #define ADC_VREF_mV    3300.0  // in millivolt
 #define ADC_RESOLUTION 4096.0
-#define AMPOP_OUT        35    // ESP32 pin connected to LM358P
+#define AMPOP_OUT        32    // ESP32 pin connected to LM358P
 #define GAIN              3.89 // AMPOP_OUT = LM35 output * GAIN
 
  // ---------- Energy data  ----------
@@ -199,6 +199,7 @@ void setup() {
 
 void TemperaturaTask(void *pvParameters) {
   while (true) {
+   xSemaphoreTake(bufferSemaphore, portMAX_DELAY);
     // read the ADC value from the temperature OpAmp
     adcValAmpOp = analogRead(AMPOP_OUT);
     // converts de ADC value read from the OpAmp into the LM35 original value
@@ -209,6 +210,7 @@ void TemperaturaTask(void *pvParameters) {
     celcius = milliVolt / 10;
     // convert the °C to °F
     farenheits = celcius * 9 / 5 + 32;
+   xSemaphoreGive(bufferSemaphore);
   }//while
 }//end Tempertura Task
 //----------------------------------------------------------------------------------------------------------------
@@ -224,13 +226,13 @@ void INATask(void *pvParameters) {
     double fatorCorrecaoC = 0.482625;
     
     xSemaphoreTake(bufferSemaphore, portMAX_DELAY);
-    rawVoltage = INA.getBusMilliVolts();
-    voltage_battery = (float)rawVoltage * ((R5 + R6) / R6) * fatorCorrecaoV * fatorMili; // Esse valor que está sendo multiplicado pelo valor da tensão tem a função de calibrar o sensor.
+     rawVoltage = INA.getBusMilliVolts();
+     voltage_battery = (float)rawVoltage * ((R5 + R6) / R6) * fatorCorrecaoV * fatorMili; // Esse valor que está sendo multiplicado pelo valor da tensão tem a função de calibrar o sensor.
     xSemaphoreGive(bufferSemaphore);
     
     xSemaphoreTake(displayMutex, portMAX_DELAY);
-    Serial.print("Tensão Bateria :");
-    Serial.println(voltage_battery);
+     Serial.print("Tensão Bateria :");
+     Serial.println(voltage_battery);
     xSemaphoreGive(displayMutex);
 
     // voltage_battery = (float)rawVoltage * 0.00131516;
@@ -240,38 +242,38 @@ void INATask(void *pvParameters) {
     // _______Sensor de Corrente INA___________ /
     
     xSemaphoreTake(bufferSemaphore, portMAX_DELAY);
-    rawCurrent = INA.getShuntMicroVolts();
-    current_motor = (float)rawCurrent * (fatorMicro / valorShunt) * fatorCorrecaoC;
+     rawCurrent = INA.getShuntMicroVolts();
+     current_motor = (float)rawCurrent * (fatorMicro / valorShunt) * fatorCorrecaoC;
     xSemaphoreGive(bufferSemaphore);
     
     xSemaphoreTake(displayMutex, portMAX_DELAY);
-    Serial.print("Corrente Bateria :");
-    Serial.println(current_motor);
+     Serial.print("Corrente Bateria :");
+     Serial.println(current_motor);
     xSemaphoreGive(displayMutex);
 
     // _______Medição de potência e consumo INA___________ /
 
     xSemaphoreTake(bufferSemaphore, portMAX_DELAY);
-    power = (float)INA.getBusMicroWatts() * fatorMicro;
-    power *= fatorCorrecaoV;
+     power = (float)INA.getBusMicroWatts() * fatorMicro;
+     power *= fatorCorrecaoV;
     xSemaphoreGive(bufferSemaphore);
     
     xSemaphoreTake(displayMutex, portMAX_DELAY);
-    Serial.print("Potencia Instantanea :");
-    Serial.println(power);
+     Serial.print("Potencia Instantanea :");
+     Serial.println(power);
     xSemaphoreGive(displayMutex);
     
     xSemaphoreTake(bufferSemaphore, portMAX_DELAY);
-    tempoAnterior = tempoAtual;
-    tempoAtual = millis();
-    tempoDelta = tempoAtual - tempoAnterior;
-    consumoParcial = power * (tempoDelta) * fatorMili;
-    consumption = consumption + consumoParcial;
+     tempoAnterior = tempoAtual;
+     tempoAtual = millis();
+     tempoDelta = tempoAtual - tempoAnterior;
+     consumoParcial = power * (tempoDelta) * fatorMili;
+     consumption = consumption + consumoParcial;
     xSemaphoreGive(bufferSemaphore);
     
     xSemaphoreTake(displayMutex, portMAX_DELAY);
-    Serial.print("Consumo :");
-    Serial.println(consumption);
+     Serial.print("Consumo :");
+     Serial.println(consumption);
     xSemaphoreGive(displayMutex);
   }//end_while
   // Imotor = (Iina * 10^-6 / 0.001) * 0,482625
@@ -301,7 +303,7 @@ void GPSTask(void *pvParameters) {
     modem.sendAT("+SGPIO=0,4,1,1");
     if (modem.waitResponse(10000L) != 1) {
       xSemaphoreTake(displayMutex, portMAX_DELAY);
-      SerialMon.println(" SGPIO=0,4,1,1 false ");
+       SerialMon.println(" SGPIO=0,4,1,1 false ");
       xSemaphoreGive(displayMutex);
     }//end_if
     modem.enableGPS();
@@ -310,30 +312,30 @@ void GPSTask(void *pvParameters) {
     xSemaphoreTake(bufferSemaphore, portMAX_DELAY);
     xSemaphoreTake(displayMutex, portMAX_DELAY);
 
-    for (int8_t i = 15; i; i--) {
-      SerialMon.println("Requesting current GPS/GNSS/GLONASS location");
-      if (modem.getGPS(&lat, &lng, &speed, &alt, &vsat, &usat, &accuracy,
-                       &year, &month, &day, &hour, &minutos, &sec)) {
-        String reading_time = String(year) + "-" + String(month) + "-" + String(day) + " " + String(hour) + ":" + String(minutos) + ":" + String(sec);
-        SerialMon.println("Latitude: " + String(lat, 8) + "\tLongitude: " + String(lng, 8));
-        SerialMon.println("Year: " + String(year) + "\tMonth: " + String(month) + "\tDay: " + String(day));
-        SerialMon.println("Hour: " + String(hour) + "\tMinute: " + String(minutos) + "\tSecond: " + String(sec));
-        SerialMon.println("Reading_time: " + reading_time);
+     for (int8_t i = 15; i; i--) {
+       SerialMon.println("Requesting current GPS/GNSS/GLONASS location");
+       if (modem.getGPS(&lat, &lng, &speed, &alt, &vsat, &usat, &accuracy,
+                        &year, &month, &day, &hour, &minutos, &sec)) {
+         String reading_time = String(year) + "-" + String(month) + "-" + String(day) + " " + String(hour) + ":" + String(minutos) + ":" + String(sec);
+         SerialMon.println("Latitude: " + String(lat, 8) + "\tLongitude: " + String(lng, 8));
+         SerialMon.println("Year: " + String(year) + "\tMonth: " + String(month) + "\tDay: " + String(day));
+         SerialMon.println("Hour: " + String(hour) + "\tMinute: " + String(minutos) + "\tSecond: " + String(sec));
+         SerialMon.println("Reading_time: " + reading_time);
 
-        break;
-      }//end_if
-      else {
-        // SerialMon.println("Couldn't get GPS/GNSS/GLONASS location, retrying in 1s.");
-        delay(1000);
-      }//end_else
-    }//end_for
+         break;
+       }//end_if
+       else {
+         // SerialMon.println("Couldn't get GPS/GNSS/GLONASS location, retrying in 1s.");
+         delay(1000);
+       }//end_else
+     }//end_for
 
     // Release the semaphore
     xSemaphoreGive(displayMutex);
     xSemaphoreGive(bufferSemaphore);
 
     // Delay for some time
-    vTaskDelay(100);
+    // vTaskDelay(100);
   }//end while
 }//end GPS task
 //----------------------------------------------------------------------------------------------------------------
@@ -353,15 +355,15 @@ void EnvioDeDadosTask(void *pvParameters) {
 
       // Prepare your HTTP POST request data
       xSemaphoreTake(bufferSemaphore, portMAX_DELAY);
-      String httpRequestData = "api_key=" + apiKeyValue + "&lat=" + String(lat, 8) + "&lng=" + String(lng, 8) + 
-                             "&celcius=" + String(celcius) + "&farenheits=" + String(farenheits) + 
-                             "&voltage_battery=" + String(voltage_battery, 1) + "&current_motor=" + String(current_motor, 1) + "&power=" + String(power, 1) + "&consumption=" + String(consumption, 1) + 
-                             "&reading_time=" + reading_time + "";
+       String httpRequestData = "api_key=" + apiKeyValue + "&lat=" + String(lat, 8) + "&lng=" + String(lng, 8) + 
+                              "&celcius=" + String(celcius) + "&farenheits=" + String(farenheits) + 
+                              "&voltage_battery=" + String(voltage_battery, 1) + "&current_motor=" + String(current_motor, 1) + "&power=" + String(power, 1) + "&consumption=" + String(consumption, 1) + 
+                              "&reading_time=" + reading_time + "";
       xSemaphoreGive(bufferSemaphore);
 
       xSemaphoreTake(displayMutex, portMAX_DELAY);
-      Serial.print("httpRequestData: ");
-      Serial.println(httpRequestData);
+       Serial.print("httpRequestData: ");
+       Serial.println(httpRequestData);
       xSemaphoreGive(displayMutex);
 
       // Send HTTP POST request
@@ -369,14 +371,14 @@ void EnvioDeDadosTask(void *pvParameters) {
 
       if (httpResponseCode > 0) {
         xSemaphoreTake(displayMutex, portMAX_DELAY);
-        Serial.print("HTTP Response code: ");
-        Serial.println(httpResponseCode);
+         Serial.print("HTTP Response code: ");
+         Serial.println(httpResponseCode);
         xSemaphoreGive(displayMutex);
       }//end_if
       else {
         xSemaphoreTake(displayMutex, portMAX_DELAY);
-        Serial.print("Error code: ");
-        Serial.println(httpResponseCode);
+         Serial.print("Error code: ");
+         Serial.println(httpResponseCode);
         xSemaphoreGive(displayMutex);
       }//end_else
       // Free resources
@@ -384,24 +386,24 @@ void EnvioDeDadosTask(void *pvParameters) {
     }//end_if
     else {
       xSemaphoreTake(displayMutex, portMAX_DELAY);
-      Serial.println("WiFi Disconnected. Attempting to connect again");
-      WiFi.begin(ssid, password);
-      Serial.println("Connecting");
+       Serial.println("WiFi Disconnected. Attempting to connect again");
+       WiFi.begin(ssid, password);
+       Serial.println("Connecting");
       xSemaphoreGive(displayMutex);
       while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        xSemaphoreTake(displayMutex, portMAX_DELAY);
+       xSemaphoreTake(displayMutex, portMAX_DELAY);
         Serial.println("WL_NOT_CONNECTED");
-        xSemaphoreGive(displayMutex);
+       xSemaphoreGive(displayMutex);
       }//end_while
       xSemaphoreTake(displayMutex, portMAX_DELAY);
-      Serial.println("");
-      Serial.print("Connected to WiFi network with IP Address: ");
-      Serial.println(WiFi.localIP());;
+       Serial.println("");
+       Serial.print("Connected to WiFi network with IP Address: ");
+       Serial.println(WiFi.localIP());;
       xSemaphoreGive(displayMutex);
     }//end_else
     // Delay for some time
-    vTaskDelay(100);
+    // vTaskDelay(100);
   }//end while
 }//end EnvioDeDados
 //----------------------------------------------------------------------------------------------------------------
@@ -410,5 +412,5 @@ void EnvioDeDadosTask(void *pvParameters) {
 void loop() {
 
   // Do nothing but allow yielding to lower-priority tasks
-  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  vTaskDelay(10000000 / portTICK_PERIOD_MS);
 }
